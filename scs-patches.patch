@@ -1,0 +1,601 @@
+diff --git a/scsfirmware.c b/scsfirmware.c
+index 02affce..eedff50 100644
+--- a/scsfirmware.c
++++ b/scsfirmware.c
+@@ -102,6 +102,7 @@ void mSleep(int millisec);
+ void uSleep(int microsec);
+ void MsgPrepareFirmware(char len, char * buffer, char log);
+ char PicProg(void);
++char serialDevice[24] = {0};
+ // ===================================================================================
+ char aConvert(char * aData)
+ {
+@@ -115,6 +116,7 @@ static void print_usage(const char *prog)
+ {
+ 	printf("Usage: %s [-fuv]\n", prog);
+ 	puts("  -f --file     firmware file name (bin)\n"
++		"  -X --device device\n"
+ 		 "  -u --update   true firmware update\n");
+ 	exit(1);
+ }
+@@ -129,6 +131,7 @@ static char parse_opts(int argc, char *argv[])
+ 
+ 	while (1) {
+ 		static const struct option lopts[] = {
++			{ "device",    2, 0, 'X' },
+ 			{ "file",      1, 0, 'f' },
+ 			{ "update",    2, 0, 'u' },
+ 			{ "verbose",   0, 0, 'v' },
+@@ -136,12 +139,19 @@ static char parse_opts(int argc, char *argv[])
+ 		};
+ 		int c;
+ 
+-		c = getopt_long(argc, argv, "D:f:u::v ", lopts, NULL);
++		c = getopt_long(argc, argv, "D:f:u::vX:", lopts, NULL);
+ 
+ 		if (c == -1)
+ 			break;
+ 
+ 		switch (c) {
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'f':
+ 			strcpy (filename,optarg);
+             printf("filename: %s\n", filename); 
+@@ -180,10 +190,12 @@ void UART_start(void)
+ 	printf("UART_Initialization\n");
+ 	fduart = -1;
+ 	
+-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fduart == -1) 
+ 	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
+@@ -337,11 +349,11 @@ int main(int argc, char *argv[])
+ 	int c = setFirst();
+ 	if (c < 0) 
+ 	{
+-		perror("Serial0 write failed - ");
++		perror("Serial write failed - ");
+ 		return -1;
+ 	}
+ 	else
+-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
++		if (verbose) fprintf(stderr,"Serial initialized - OK\n");
+ 
+ 	mSleep(2);					// pausa
+ 	rx_len = 0;
+diff --git a/scsgate_x.c b/scsgate_x.c
+index 9c32a2a..8c55730 100644
+--- a/scsgate_x.c
++++ b/scsgate_x.c
+@@ -61,6 +61,7 @@ char    huegate = 0;		// simulazione hue gate per alexa
+ char    mqttgate = 0;		// connessione in/out a broker mqtt
+ char    huemqtt_direct = 0;	// 1: ponte diretto hue -> mqtt (stati)     2: ponte hue -> mqtt (comandi)
+ char    uartgate = 1;		// connessione in/out serial0 (uart)
++char    serialDevice[24] = {0};
+ char	mqttbroker[24] = {0};
+ char	user[24] = {0};
+ char	password[24] = {0};
+@@ -274,6 +275,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-uvHBDN]\n", prog);
+ 	puts("  -u --picupdate  immediate update pic eeprom \n"
++		 "  -X --device device\n"
+ 		 "  -v --verbose 1/2/3  \n"
+ 		 "  -H --huegate interface(alexa)\n"
+ 		 "  -B --broker address  broker name/address:port (default localhost)\n"
+@@ -296,6 +298,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 	while (1) {
+ 		static const struct option lopts[] = {
+ //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
++			{ "device",     2, 0, 'X' },
+ 			{ "picupdate",  0, 0, 'u' },
+ 			{ "verbose",    2, 0, 'v' },
+ 			{ "huegate",    0, 0, 'H' },
+@@ -308,11 +311,19 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 			{ NULL, 0, 0, 0 },
+ 		};
+ 		int c;
+-		c = getopt_long(argc, argv, "uv::HB::U:P:DNh", lopts, NULL);
++		c = getopt_long(argc, argv, "uv::HB::U:P:DNhX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+ 		switch (c) {
++		case 'X':
++			if (optarg)
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
++
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
+@@ -408,10 +419,12 @@ void UART_start(void)
+ 	printf("UART_Initialization\n");
+ 	fduart = -1;
+ 	
+-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fduart == -1) 
+ 	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
+@@ -950,11 +963,11 @@ int main(int argc, char *argv[])
+ 	int c = setFirst();
+ 	if (c < 0) 
+ 	{
+-		perror("Serial0 write failed - ");
++		perror("Serial write failed - ");
+ 		return -1;
+ 	}
+ 	else
+-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
++		if (verbose) fprintf(stderr,"Serial initialized - OK\n");
+ 
+ 	mSleep(20);					// pausa
+ 	rx_len = 0;
+diff --git a/scsgate_y.c b/scsgate_y.c
+index acda668..b197cd7 100644
+--- a/scsgate_y.c
++++ b/scsgate_y.c
+@@ -73,7 +73,6 @@ char	immediatePicUpdate = 0;
+ char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
+ char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono dispositivi di tipo 12    3=entrambi
+ // =============================================================================================
+-static const char *serial0   = "/dev/serial0";	// gpio uart 1
+ static const char *i2cdevice = "/dev/i2c-1";	// I2C bus
+ // =============================================================================================
+ char    i2cgate = 0;		// accesso schede locali i2c
+@@ -100,6 +99,7 @@ char    huegate = 0;		// simulazione hue gate per alexa
+ char    mqttgate = 0;		// connessione in/out a broker mqtt
+ char    huemqtt_direct = 0;	// 1: ponte diretto hue -> mqtt (stati)     2: ponte hue -> mqtt (comandi)
+ char    uartgate = 1;		// connessione in/out serial0 (uart)
++char    serialDevice[24] = {0};
+ char	mqttbroker[24] = {0};
+ char	user[24] = {0};
+ char	password[24] = {0};
+@@ -330,6 +330,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-uvHBUPIsD]\n", prog);
+ 	puts("  -u --picupdate  immediate update pic eeprom \n"
++		 "  -X --device device\n"
+ 		 "  -v --verbose [1/2/3]  \n"
+ 		 "  -H --huegate interface(alexa)\n"
+ 		 "  -B --broker address  broker name/address:port (default localhost)\n"
+@@ -354,6 +355,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 	while (1) {
+ 		static const struct option lopts[] = {
+ //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
++			{ "device",     2, 0, 'X' },
+ 			{ "picupdate",  0, 0, 'u' },
+ 			{ "verbose",    2, 0, 'v' },
+ 			{ "huegate",    0, 0, 'H' },
+@@ -368,7 +370,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 			{ NULL, 0, 0, 0 },
+ 		};
+ 		int c;
+-		c = getopt_long(argc, argv, "uv::HB::U:P:DNI::s:h", lopts, NULL);
++		c = getopt_long(argc, argv, "uv::HB::U:P:DNI::s:hX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+@@ -376,6 +378,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'u':
+ 			immediatePicUpdate = 1;
+ 			printf("Immediate pic update\n");
+@@ -479,11 +488,13 @@ void UART_start(void)
+ 
+ 	printf("UART_Initialization\n");
+ 	fduart = -1;
+-	
+-	fduart = open(serial0, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+-	if (fduart == -1) 
+-	{
+-		perror("open_port: Unable to open '/dev/serial0' \n");
++
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++ 	if (fduart == -1) 
++ 	{
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
+@@ -1234,11 +1245,11 @@ int main(int argc, char *argv[])
+ 	int c = setFirst();
+ 	if (c < 0) 
+ 	{
+-		perror("Serial0 write failed - ");
++		perror("Serial write failed - ");
+ 		return -1;
+ 	}
+ 	else
+-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
++		if (verbose) fprintf(stderr,"Serial initialized - OK\n");
+ 
+ 	mSleep(20);					// pausa
+ 	rx_len = 0;
+diff --git a/scsgate_z.c b/scsgate_z.c
+index ee2b9e8..5a591fd 100644
+--- a/scsgate_z.c
++++ b/scsgate_z.c
+@@ -74,7 +74,6 @@ char	immediatePicUpdate = 0;
+ char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
+ char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono dispositivi di tipo 12    3=entrambi
+ // =============================================================================================
+-static const char *serial0   = "/dev/serial0";	// gpio uart 1
+ static const char *i2cdevice = "/dev/i2c-1";	// I2C bus
+ // =============================================================================================
+ char    i2cgate = 0;		// accesso schede locali i2c
+@@ -101,6 +100,7 @@ char    huegate = 0;		// simulazione hue gate per alexa
+ char    mqttgate = 0;		// connessione in/out a broker mqtt
+ char    huemqtt_direct = 0;	// 1: ponte diretto hue -> mqtt (stati)     2: ponte hue -> mqtt (comandi)
+ char    uartgate = 1;		// connessione in/out serial0 (uart)
++char    serialDevice[24] = {0};
+ char	mqttbroker[24] = {0};
+ char	user[24] = {0};
+ char	password[24] = {0};
+@@ -340,6 +340,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-uvHBUPIsD]\n", prog);
+ 	puts("  -u --picupdate  immediate update pic eeprom \n"
++		 "  -X --device device\n"
+ 		 "  -v --verbose [1/2/3]  \n"
+ 		 "  -H --huegate interface(alexa)\n"
+ 		 "  -B --broker address  broker name/address:port (default localhost)\n"
+@@ -364,6 +365,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 	while (1) {
+ 		static const struct option lopts[] = {
+ //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
++			{ "device",     2, 0, 'X' },
+ 			{ "picupdate",  0, 0, 'u' },
+ 			{ "verbose",    2, 0, 'v' },
+ 			{ "huegate",    0, 0, 'H' },
+@@ -378,7 +380,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 			{ NULL, 0, 0, 0 },
+ 		};
+ 		int c;
+-		c = getopt_long(argc, argv, "uv::HB::U:P:DNI::s:h", lopts, NULL);
++		c = getopt_long(argc, argv, "uv::HB::U:P:DNI::s:hX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+@@ -386,6 +388,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'u':
+ 			immediatePicUpdate = 1;
+ 			printf("Immediate pic update\n");
+@@ -490,10 +499,12 @@ void UART_start(void)
+ 	printf("UART_Initialization\n");
+ 	fduart = -1;
+ 	
+-	fduart = open(serial0, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fduart == -1) 
+ 	{
+-		perror("open_port: Unable to open '/dev/serial0' \n");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
+@@ -1346,11 +1357,11 @@ int main(int argc, char *argv[])
+ 	int c = setFirst();
+ 	if (c < 0) 
+ 	{
+-		perror("Serial0 write failed - ");
++		perror("Serial write failed - ");
+ 		return -1;
+ 	}
+ 	else
+-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
++		if (verbose) fprintf(stderr,"Serial initialized - OK\n");
+ 
+ 	mSleep(20);					// pausa
+ 	rx_len = 0;
+diff --git a/scslog.c b/scslog.c
+index e5142eb..f200db1 100644
+--- a/scslog.c
++++ b/scslog.c
+@@ -85,6 +85,7 @@ int     rx_len;
+ int     rx_max = 250;
+ uint8_t	my_busid = 0;
+ uint8_t	extended = 0;
++char    serialDevice[24] = {0};
+ // =============================================================================================
+ void rxBufferLoad(int tries);
+ void mSleep(int millisec);
+@@ -141,6 +142,7 @@ void uSleep(int microsec) {
+ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-v -ixx]\n", prog);
++	puts("  -X --device device\n");
+ 	puts("  -v   --verbose \n");
+ 	puts("  -ixx --mybusid (xx) \n");
+ 	exit(1);
+@@ -157,13 +159,14 @@ static uint8_t parse_opts(int argc, char *argv[])	// NOT USED
+ 	while (1) {
+ 		static const struct option lopts[] = {
+ //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
++			{ "device",     2, 0, 'X' },
+ 			{ "verbose",    0, 0, 'v' },
+ 			{ "mybusid",    1, 0, 'i' },
+ 			{ "help",		0, 0, '?' },
+ 			{ NULL, 0, 0, 0 },
+ 		};
+ 		int c;
+-		c = getopt_long(argc, argv, "v i:h ", lopts, NULL);
++		c = getopt_long(argc, argv, "v i:hX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+@@ -171,6 +174,13 @@ static uint8_t parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'v':
+ 			verbose=1;
+ 			printf("Verbose\n");
+@@ -373,10 +383,12 @@ int main(int argc, char *argv[])
+ 
+ 	printf("UART_Initialization\n");
+ 	
+-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fduart == -1) 
+ 	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+ 		return(-1);
+ 	}
+ 
+diff --git a/scsmonitor.c b/scsmonitor.c
+index 48580d0..86ec430 100644
+--- a/scsmonitor.c
++++ b/scsmonitor.c
+@@ -61,6 +61,8 @@ long ret;
+     return (char) ret;
+ }
+ // =============================================================================================
++char    serialDevice[24] = {0};
++// =============================================================================================
+ void initkeyboard(void){
+     tcgetattr(0,&tios_bak);
+     tios=tios_bak;
+@@ -101,6 +103,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-ixx]\n", prog);
+ 	puts("  -ixx --mybusid (xx) \n"
++		 "  -X --device device\n"
+ 		 );
+ 	exit(1);
+ }
+@@ -116,12 +119,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 	while (1) {
+ 		static const struct option lopts[] = {
+ //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
++			{ "device",     2, 0, 'X' },
+ 			{ "mybusid",    1, 0, 'i' },
+ 			{ "help",		0, 0, '?' },
+ 			{ NULL, 0, 0, 0 },
+ 		};
+ 		int c;
+-		c = getopt_long(argc, argv, "i:h ", lopts, NULL);
++		c = getopt_long(argc, argv, "i:hX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+@@ -129,6 +133,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'i':
+ 			if (optarg) 
+ 				my_busid=axTOchar(optarg);
+@@ -177,11 +188,13 @@ int main(int argc, char *argv[])
+ 
+ 	printf("UART_Initialization\n");
+ 	int fd = -1;
+-	
+-	fd = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++
++	fd = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fd == -1) 
+-	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++ 	{
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+ 		return(-1);
+ 	}
+ 
+diff --git a/scstcp.c b/scstcp.c
+index b41ab6e..544e635 100644
+--- a/scstcp.c
++++ b/scstcp.c
+@@ -71,6 +71,7 @@ char	httpcallback[128] = {0};
+ char	httpaddress[18] = {0};
+ char	httpport[8] = {0};
+ struct	in_addr httpaddr;
++char    serialDevice[24] = {0};
+ // =============================================================================================
+   typedef union _WORD_VAL
+   {
+@@ -178,6 +179,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-upv]\n", prog);
+ 	puts("  -u --picupdate  immediate update pic eeprom \n"
++		 "  -X --device device\n"
+ 		 "  -p --port   \n"
+ 		 "  -v --verbose   \n");
+ 	exit(1);
+@@ -193,6 +195,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 
+ 	while (1) {
+ 		static const struct option lopts[] = {
++			{ "device",     2, 0, 'X' },
+ 			{ "picupdate",  0, 0, 'u' },
+ 			{ "port",       1, 0, 'p' },
+ 			{ "verbose",    0, 0, 'v' },
+@@ -201,7 +204,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		};
+ 		int c;
+ 
+-		c = getopt_long(argc, argv, "u p:v h", lopts, NULL);
++		c = getopt_long(argc, argv, "u p:v hX:", lopts, NULL);
+ 		if (c == -1)
+ 			return 0;
+ 
+@@ -209,6 +212,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'u':
+ 			immediatePicUpdate = 1;
+ 			printf("Immediate pic update\n");
+@@ -292,10 +302,12 @@ void UART_start(void)
+ 	printf("UART_Initialization\n");
+ 	fduart = -1;
+ 	
+-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fduart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fduart == -1) 
+ 	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
+diff --git a/scsudp.c b/scsudp.c
+index e796aa4..7b4ab9f 100644
+--- a/scsudp.c
++++ b/scsudp.c
+@@ -66,6 +66,7 @@ int	   fdUart;
+ FILE   *fConfig;
+ char	filename[64];
+ int  timeToClose = 0;
++char    serialDevice[24] = {0};
+ // =============================================================================================
+   typedef union _WORD_VAL
+   {
+@@ -168,6 +169,7 @@ static void print_usage(const char *prog)	// NOT USED
+ {
+ 	printf("Usage: %s [-uv]\n", prog);
+ 	puts("  -u --picupdate  immediate update pic eeprom \n"
++		 "  -X --device device  \n"
+ 		 "  -v --verbose   \n");
+ 	exit(1);
+ }
+@@ -182,6 +184,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 
+ 	while (1) {
+ 		static const struct option lopts[] = {
++			{ "device",     2, 0, 'X' },
+ 			{ "picupdate",  0, 0, 'u' },
+ 			{ "verbose",    0, 0, 'v' },
+ 			{ "help",		0, 0, '?' },
+@@ -189,7 +192,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		};
+ 		int c;
+ 
+-		c = getopt_long(argc, argv, "u v h", lopts, NULL);
++		c = getopt_long(argc, argv, "u v h X:", lopts, NULL);
+ 
+ 		if (c == -1)
+ 			return 0;
+@@ -198,6 +201,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
+ 		case 'h':
+ 			print_usage(PROGNAME);
+ 			break;
++		case 'X':
++			if (optarg) 
++				strcpy(serialDevice, optarg);
++			else
++				strcpy(serialDevice,"/dev/serial0");
++			printf("Serial device: %s\n", serialDevice);
++			break;
+ 		case 'u':
+ 			immediatePicUpdate = 1;
+ 			printf("Immediate pic update\n");
+@@ -277,10 +287,12 @@ void UART_start(void)
+ 	printf("UART_Initialization\n");
+ 	fdUart = -1;
+ 	
+-	fdUart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
++	fdUart = open(serialDevice, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+ 	if (fdUart == -1) 
+ 	{
+-		perror("open_port: Unable to open /dev/serial0 - ");
++		char err_buffer[256];
++		sprintf(err_buffer, "open_port: Unable to open '%s'\n", serialDevice);
++		perror(err_buffer);
+         exit(EXIT_FAILURE);
+ 	}
+ 
